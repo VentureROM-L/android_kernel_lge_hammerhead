@@ -77,6 +77,7 @@
 #include <asm/tlb.h>
 #include <asm/irq_regs.h>
 #include <asm/mutex.h>
+#include <asm/relaxed.h>
 #ifdef CONFIG_PARAVIRT
 #include <asm/paravirt.h>
 #endif
@@ -4109,6 +4110,24 @@ int idle_cpu(int cpu)
 	return 1;
 }
 
+int idle_cpu_relaxed(int cpu)
+{
+	struct rq *rq = cpu_rq(cpu);
+
+	if (cpu_relaxed_read_long(&rq->curr) != rq->idle)
+		return 0;
+
+	if (cpu_relaxed_read_long(&rq->nr_running))
+		return 0;
+
+#ifdef CONFIG_SMP
+	if (!llist_empty_relaxed(&rq->wake_list))
+		return 0;
+#endif
+
+	return 1;
+}
+
 /**
  * idle_task - return the idle task for a given cpu.
  * @cpu: the processor in question.
@@ -5515,6 +5534,7 @@ migration_call(struct notifier_block *nfb, unsigned long action, void *hcpu)
 
 	case CPU_UP_PREPARE:
 		rq->calc_load_update = calc_load_update;
+		rq->next_balance = jiffies;
 		break;
 
 	case CPU_ONLINE:
@@ -6977,9 +6997,6 @@ void __init sched_init_smp(void)
 
 	hotcpu_notifier(cpuset_cpu_active, CPU_PRI_CPUSET_ACTIVE);
 	hotcpu_notifier(cpuset_cpu_inactive, CPU_PRI_CPUSET_INACTIVE);
-
-	/* RT runtime code needs to handle some hotplug events */
-	hotcpu_notifier(update_runtime, 0);
 
 	init_hrtick();
 
