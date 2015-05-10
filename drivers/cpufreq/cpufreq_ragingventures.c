@@ -24,6 +24,7 @@
 #include <linux/ktime.h>
 #include <linux/sched.h>
 
+#include <mach/kgsl.h>
 static int g_count = 0;
 
 #define DEF_SAMPLING_RATE                       (15000)
